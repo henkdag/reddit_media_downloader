@@ -1,0 +1,45 @@
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+venv/
+.venv/
+
+# Test and tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local runtime data
+Downloads/
+downloads/
+logs/
+downloader.log
+downloader.log.old
+failed.csv
+processed_posts.csv
+logs/failed.csv
+logs/processed_posts.csv
+blacklisted_subreddits.txt
+post_votes.csv
+
+# Project runtime directories
+docker/state/
+docker/input/
+
+# Secrets and local auth material
+cookies.txt
+
+# Local environment overrides
+.env
+.env.*
+*.local
+
+# Editor / OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.code-workspace

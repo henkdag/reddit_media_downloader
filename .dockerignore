@@ -1,0 +1,11 @@
+__pycache__/
+venv/
+*.pyc
+*.pyo
+*.pyd
+downloader.log
+downloader.log.old
+failed.csv
+processed_posts.csv
+post_votes.csv
+docker/

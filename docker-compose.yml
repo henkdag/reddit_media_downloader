@@ -1,0 +1,14 @@
+services:
+  reddit-downloader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: reddit-downloader:latest
+    restart: "no"
+    env_file:
+      - ./docker.env
+    volumes:
+      - ${DOWNLOADER_INPUT_HOST_DIR:-./docker/input}:/data/input:ro
+      - ${DOWNLOADER_STATE_HOST_DIR:-./docker/state}:/data/state
+      - ${DOWNLOADER_OUTPUT_HOST_DIR:-./downloads}:/data/downloads
+      - ${DOWNLOADER_COOKIES_HOST_FILE:-./cookies.txt}:/data/cookies/cookies.txt:ro
