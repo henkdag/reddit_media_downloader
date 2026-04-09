@@ -174,7 +174,7 @@ If strict cookie validation is enabled and the check fails, the process exits wi
 
 ## Repair Utility
 
-The included [repair_invalid_images.py](/home/hvo/reddit_downloader/repair_invalid_images.py) script can scan the download directory for:
+The included [repair_invalid_images.py](./repair_invalid_images.py) script can scan the download directory for:
 
 - corrupted JPEG or image files
 - suspicious mixed-resolution image sets
@@ -215,8 +215,8 @@ This is expected with the default safety setting. Wait and rerun later, or adjus
 
 ## Files in This Repo
 
-- [main.py](/home/hvo/reddit_downloader/main.py): downloader entrypoint
-- [repair_invalid_images.py](/home/hvo/reddit_downloader/repair_invalid_images.py): cleanup utility
-- [docker-compose.yml](/home/hvo/reddit_downloader/docker-compose.yml): one-shot Docker runner
-- [docker.env](/home/hvo/reddit_downloader/docker.env): container-side defaults
-- [reddit-downloader.env](/home/hvo/reddit_downloader/reddit-downloader.env): local environment example
+- [main.py](./main.py): downloader entrypoint
+- [repair_invalid_images.py](./repair_invalid_images.py): cleanup utility
+- [docker-compose.yml](./docker-compose.yml): one-shot Docker runner
+- [docker.env](./docker.env): container-side defaults
+- [reddit-downloader.env](./reddit-downloader.env): local environment example
