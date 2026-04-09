@@ -1,6 +1,6 @@
-# Reddit Downloader
+# Reddit Media Downloader
 
-A batch downloader for Reddit post media based on an exported vote CSV.
+A batch downloader for Reddit post media based on an exported vote CSV, with a specific focus on NSFW content.
 
 It reads a CSV with Reddit post IDs and permalinks, downloads media from posts with `direction=up`, and keeps state so reruns only process new items.
 
