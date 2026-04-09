@@ -93,7 +93,7 @@ If you do not set those variables, the compose file defaults to:
 
 Change the Docker output location by setting `DOWNLOADER_OUTPUT_HOST_DIR` before running `docker compose`.
 
-More Docker details are in [DOCKER.md](/home/hvo/reddit_downloader/DOCKER.md).
+More Docker details are in [DOCKER.md](./DOCKER.md).
 
 ## How Input Selection Works
 
