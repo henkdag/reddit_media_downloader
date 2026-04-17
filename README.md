@@ -11,6 +11,8 @@ This project is not under active development. It is shared as-is, and issues or 
 ## Features
 
 - Downloads images, galleries, Reddit-hosted videos, and some external embeds
+- Resolves `soundgasm.net` links found in Reddit self-post bodies and downloads the underlying audio file
+- Writes Reddit audio (GWA) metadata into downloaded `.m4a` and `.mp3` files, including creator, title and tags
 - Automatically picks the newest CSV file in the input directory
 - Keeps state in CSV and log files so repeated runs are incremental
 - Supports cookie-based access for content that needs a logged-in Reddit session
@@ -21,6 +23,7 @@ This project is not under active development. It is shared as-is, and issues or 
 
 - Python 3.12+
 - A Reddit cookies file in Netscape format if you want authenticated downloads
+- Python dependencies from `requirements.txt` including `mutagen` for audio tag writing
 - A CSV with at least these columns:
 
 ```csv

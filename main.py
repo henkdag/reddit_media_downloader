@@ -8,7 +8,16 @@ import random
 import requests
 import json
 from http.cookiejar import MozillaCookieJar
+from html import unescape
 from urllib.parse import urlparse
+
+try:
+    from mutagen.id3 import COMM, TALB, TCON, TIT2, TPE1, TXXX, ID3, ID3NoHeaderError
+    from mutagen.mp3 import MP3
+    from mutagen.mp4 import MP4
+    AUDIO_METADATA_AVAILABLE = True
+except ImportError:
+    AUDIO_METADATA_AVAILABLE = False
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -101,6 +110,7 @@ os.makedirs(os.path.dirname(LOG_OLD_FILE), exist_ok=True)
 processed_posts = set()
 
 blacklisted_subreddits = set()
+audio_metadata_warning_shown = False
 
 
 
@@ -325,6 +335,11 @@ def is_dead_external_url(url):
 def is_redgifs_url(url):
     host = (urlparse(url).hostname or "").lower()
     return host in {"redgifs.com", "www.redgifs.com"}
+
+
+def is_soundgasm_url(url):
+    host = (urlparse(url).hostname or "").lower()
+    return host in {"soundgasm.net", "www.soundgasm.net"}
 
 
 def get_redgifs_slug(url):
@@ -718,9 +733,32 @@ def resolve_redgifs_media_url(url, session):
 
     return None
 
+
+def resolve_soundgasm_media_url(url, session):
+    try:
+        sleep_with_jitter()
+        r = get_with_retries(session, url, timeout=20)
+        html = r.text
+
+        patterns = [
+            r'\bm4a:\s*"([^"]+)"',
+            r'\bmp3:\s*"([^"]+)"',
+            r'<source[^>]+src="([^"]+)"',
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, html)
+            for match in matches:
+                if match:
+                    return match.replace("&amp;", "&")
+    except Exception as e:
+        log_message(f"[!] Soundgasm resolve failed for {url}: {e}")
+
+    return None
+
 def ext_from_url(url, default=".bin"):
     base = url.split("?")[0].lower()
-    for ext in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4"):
+    for ext in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".m4a", ".mp3"):
         if base.endswith(ext):
             return ext
     return default
@@ -753,10 +791,112 @@ def guess_ext_from_media_url(url, post=None):
         return ".jpg"
     if is_redgifs_url(url):
         return ".mp4"
+    if is_soundgasm_url(url):
+        return ".m4a"
     if post and post.get("is_video"):
         return ".mp4"
     return ".bin"
 
+
+def parse_title_metadata(raw_title):
+    raw_title = (raw_title or "").strip()
+    tags = [tag.strip() for tag in re.findall(r"\[([^\]]+)\]", raw_title) if tag.strip()]
+    cleaned_title = re.sub(r"\s*\[[^\]]+\]", "", raw_title).strip()
+    cleaned_title = re.sub(r"\s{2,}", " ", cleaned_title)
+    return {
+        "full_title": raw_title,
+        "display_title": cleaned_title or raw_title or "unknown",
+        "tags": tags,
+    }
+
+
+def build_audio_metadata(post):
+    title_info = parse_title_metadata(post.get("title"))
+    author = (post.get("author") or "unknown").strip() or "unknown"
+    subreddit = (post.get("subreddit") or "unknown").strip() or "unknown"
+    permalink = (post.get("permalink") or "").strip()
+    if permalink.startswith("/"):
+        permalink = f"https://www.reddit.com{permalink}"
+
+    comments = []
+    if title_info["tags"]:
+        comments.append(f"Tags: {', '.join(title_info['tags'])}")
+    if permalink:
+        comments.append(f"Reddit: {permalink}")
+
+    return {
+        "title": title_info["display_title"],
+        "full_title": title_info["full_title"],
+        "author": author,
+        "subreddit": subreddit,
+        "tags": title_info["tags"],
+        "permalink": permalink,
+        "comment": " | ".join(comments),
+    }
+
+
+def apply_audio_metadata(path, post):
+    global audio_metadata_warning_shown
+
+    if not post:
+        return
+
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in {".m4a", ".mp3"}:
+        return
+    if not AUDIO_METADATA_AVAILABLE:
+        if not audio_metadata_warning_shown:
+            log_message("[*] Audio metadata tagging skipped: install mutagen to enable it")
+            audio_metadata_warning_shown = True
+        return
+
+    metadata = build_audio_metadata(post)
+
+    try:
+        if ext == ".m4a":
+            audio = MP4(path)
+            audio["\xa9nam"] = [metadata["title"]]
+            audio["\xa9ART"] = [metadata["author"]]
+            audio["\xa9alb"] = [metadata["subreddit"]]
+            if metadata["tags"]:
+                audio["\xa9gen"] = [", ".join(metadata["tags"])]
+            if metadata["comment"]:
+                audio["\xa9cmt"] = [metadata["comment"]]
+            if metadata["permalink"]:
+                audio["----:com.apple.iTunes:reddit_permalink"] = [metadata["permalink"].encode("utf-8")]
+            if metadata["tags"]:
+                audio["----:com.apple.iTunes:reddit_tags"] = [", ".join(metadata["tags"]).encode("utf-8")]
+            audio.save()
+            return
+
+        try:
+            tags = ID3(path)
+        except ID3NoHeaderError:
+            tags = ID3()
+
+        tags.delall("TIT2")
+        tags.delall("TPE1")
+        tags.delall("TALB")
+        tags.delall("TCON")
+        tags.delall("COMM")
+        tags.delall("TXXX:reddit_permalink")
+        tags.delall("TXXX:reddit_tags")
+
+        tags.add(TIT2(encoding=3, text=metadata["title"]))
+        tags.add(TPE1(encoding=3, text=metadata["author"]))
+        tags.add(TALB(encoding=3, text=metadata["subreddit"]))
+        if metadata["tags"]:
+            tags.add(TCON(encoding=3, text=[", ".join(metadata["tags"])]))
+        if metadata["comment"]:
+            tags.add(COMM(encoding=3, lang="eng", desc="", text=metadata["comment"]))
+        if metadata["permalink"]:
+            tags.add(TXXX(encoding=3, desc="reddit_permalink", text=metadata["permalink"]))
+        if metadata["tags"]:
+            tags.add(TXXX(encoding=3, desc="reddit_tags", text=", ".join(metadata["tags"])))
+
+        tags.save(path)
+    except Exception as e:
+        log_message(f"[!] Could not write audio metadata for {path}: {e}")
 
 
 def extract_media_urls(post):
@@ -838,6 +978,27 @@ def extract_media_urls(post):
             queued.add(url)
             still_urls.append(url)
 
+    def extract_selftext_candidate_urls():
+        candidates = []
+        seen_candidates = set()
+
+        def add_candidate(url):
+            url = normalize_url(url)
+            if not url or url in seen_candidates:
+                return
+            seen_candidates.add(url)
+            candidates.append(url)
+
+        selftext_html = unescape(post.get("selftext_html") or "")
+        for match in re.findall(r'href="([^"]+)"', selftext_html):
+            add_candidate(match)
+
+        selftext = post.get("selftext") or ""
+        for match in re.findall(r"\[[^\]]+\]\((https?://[^)\s]+)\)", selftext):
+            add_candidate(match)
+
+        return candidates
+
     if post.get("is_gallery"):
         media_metadata = post.get("media_metadata", {})
         items = post.get("gallery_data", {}).get("items", [])
@@ -872,6 +1033,10 @@ def extract_media_urls(post):
                 add_animated(url)
             else:
                 add_still(url, priority=2)
+
+    for url in extract_selftext_candidate_urls():
+        if is_soundgasm_url(url):
+            add_still(url, priority=2)
 
     for url in animated_urls:
         add_url(url)
@@ -943,6 +1108,13 @@ def process_post(post_id, permalink):
                     continue
                 if redgifs_slug:
                     seen_redgifs_slugs.add(redgifs_slug)
+                download_url = resolved_url
+            elif is_soundgasm_url(url):
+                resolved_url = resolve_soundgasm_media_url(url, session)
+                if not resolved_url:
+                    log_failed(post_id, permalink, f"soundgasm_resolve_failed:{url}")
+                    log_message(f"[!] Skip {post_id}: could not resolve Soundgasm URL {url}")
+                    continue
                 download_url = resolved_url
 
             ext = guess_ext_from_media_url(download_url)
@@ -1038,6 +1210,13 @@ def process_post(post_id, permalink):
             if redgifs_slug:
                 seen_redgifs_slugs.add(redgifs_slug)
             download_url = resolved_url
+        elif is_soundgasm_url(url):
+            resolved_url = resolve_soundgasm_media_url(url, session)
+            if not resolved_url:
+                log_failed(post_id, permalink, f"soundgasm_resolve_failed:{url}")
+                log_message(f"[!] Skip {post_id}: could not resolve Soundgasm URL {url}")
+                continue
+            download_url = resolved_url
 
         ext = guess_ext_from_media_url(download_url, post)
         canonical_url = canonical_media_url(download_url)
@@ -1054,6 +1233,7 @@ def process_post(post_id, permalink):
             continue
         try:
             file_hash = download_file(session, download_url, path, hash_file=should_hash)
+            apply_audio_metadata(path, post)
             if should_hash:
                 if file_hash in seen_image_hashes:
                     os.remove(path)
